@@ -10,98 +10,93 @@
 ;;;
 
 (define (min a b) (if (< a b) a b))
+(define (max a b) (if (> a b) a b))
+(define fps 10)
+(define xv 10)
+(define elas -0.2)
+(define depth 5)
+(define pi 3.141592653589793238462643383279502884)
 
 (define (dot x y theta color)
-  (pixel (* x (sin (* theta 3.141592653589793238462643383279502884))) (+ y (/ (* x (cos (* theta 3.141592653589793238462643383279502884))) 5)) color) ;; convert theta to rad
+  (pixel (* x (sin (* theta pi))) (+ y (/ (* x (cos (* theta pi))) depth)) color) ;; convert theta to rad
 )
 
-(define (bounce x y yv c t)
+(define (update_yv x y yv c theta)
   (cond
     ((< yv 0)
       (cond
-        ((and (<= x 100) (< y 300)) ;First circle is 100 radius, y 300
-          (* yv -0.5))
-        ((and (and (< (abs x) 200) (> (abs x) 100)) (< y 100)) ;Second circle is 200 radius, y 100
-          (* yv -0.5))
+        ((and (< y 300) (<= x (* 100 (cos (* (+ theta 0.2) pi)))))
+          (* yv elas)
+        )
+        ((and (< y 100) (<= x (* 200 (cos (* (- theta 0.4) pi)))))
+          (* yv elas)
+        )
+        ((and (< y -100) (<= x (* 300 (cos (* theta pi)))))
+          (* yv elas)
+        )
+        ((and (< y -300) (<= x (* 400 (cos (* (+ theta 0.7) pi)))))
+          (* yv elas)
+        )
         (else ;No bounce, yv stays the same
-          (dot x y t c)
-          (+ yv -0.981)
+          (dot x y theta c)
+          (- yv (/ 9.81 fps))
         ) 
       )
     )
     (else
-      (dot x y t c)
-      (+ yv -0.981)
+      (dot x y theta c)
+      (- yv (/ 9.81 fps))
     )
   )
 )
 
-; cf => current frame
 ; x => x coordinate
 ; y => y coordinate
 ; yv => y velocity
 ; xs => x starting coordinate
 ; ys => y starting coordinate
-; c => current color
-; seed => current seed for rng
-; t => theta of current ball
-(define (frame cf x y yv xs ys seed t)
-  (define x (+ x 1)) ;Updating x
-  (define y (+ y (/ yv 10))) ;Updating y
+; theta => theta of current particle
+(define (simulate_frame x y yv xs ys theta)
+  (define x (+ x (/ xv fps))) ;Updating x position
+  (define y (+ y (/ yv fps))) ;Updating y position
   (cond
-    ((and (>= y -500) (<= x 500))
+    ((and (>= y -600) (<= x 500)) ;checks if the particle is visible in image
       (define c
-        (rgb 
-          (- 1 (/ x 350))
-          (min 1 (- 1 (/ (abs yv) 200)))
-          (- 1 (/ (+ y 500) 1000))
+        (rgb ;Determine color based on x, y, and yv (creates gradient)
+          (max (min 1 (- 1 (/ x 450))) 0)
+          (max (min 1 (- 1 (/ (abs yv) 200))) 0)
+          (max (min 1 (- 1 (/ (+ y 500) 1000))) 0)
         )
       )
-      (frame (+ cf 1) x y (bounce x y yv c t) xs ys seed t))
-    ((<= (abs t) 1) ;New ball
-      (cond ;DETERMINE IF FINISHED THIS COLUMN
-        ((<= ys 400) ;Finished column
+      (simulate_frame x y (update_yv x y yv c theta) xs ys theta))
+    ((<= (abs theta) 1) ;This stops recursing when finished rendering particles around cylinder
+      (cond ;This will check how "simulate_frame" should recurse
+        ((<= ys 400) ;Finished rendering all pixels for this theta, start with new theta
+          ;This will "flip-flop" the particles we render from + to -
+          ;This is because the function renders the particles from back to front
+          ;As the particles in the front should appear on top
+          ;Note that theta = 0 is pointing directly away from the viewer
           (cond
-            ((<= t 0)
-              (define t (+ (* t -1) 0.002)))
+            ((<= theta 0)
+              (define theta (+ (* theta -1) 0.002)))
             (else
-              (define t (* t -1)))
+              (define theta (* theta -1)))
           )
-          (frame 0 0 450 0 0 450 seed t)
+          (simulate_frame 0 450 0 0 450 theta)
         )
-        (else
+        (else ;Render new particle with same theta, but lower starting y value
           (define start_y (- ys 10))
-          (frame 0 0 start_y 0 0 start_y seed t)
+          (simulate_frame 0 start_y 0 0 start_y theta)
         )
       )
-    )
-  )
-)
-
-(define (platforms t y radius)
-  (goto (* radius (sin (* t 3.141592653589793238462643383279502884))) (+ y (/ (* radius (cos (* t 3.141592653589793238462643383279502884))) 5)))
-  (cond
-    ((>= t 2)
-      (end_fill)
-    )
-    (else
-      (platforms (+ t 0.01) y radius)
     )
   )
 )
 
 (define (draw)
   (hideturtle)
-  (pu)
-  (color "#ff9999")
   (bgcolor "#191919")
-
-  (begin_fill)
-  (platforms 0 100 200)
-  (begin_fill)
-  (platforms 0 300 100)
-
-  (frame 0 0 450 0 0 450 1827394 0.002)
+  (simulate_frame 0 450 0 0 450 0.002)
 )
 
 ; Please leave this last line alone.  You may add additional procedures above
